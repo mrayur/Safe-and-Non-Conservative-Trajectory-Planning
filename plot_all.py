@@ -9,8 +9,8 @@ import pickle
 
 # %% Define Plot tasks
 Task = []
-Task.append(["20-10-2023_09:36:48_USA_US101-13_2_T-1"])
-Task.append(["20-10-2023_09:35:33_DEU_A99-1_2_T-1"])
+Task.append(["03-02-2025_11:34:20_USA_US101-13_2_T-1"])
+Task.append(["USA_US101-13_2_T-1_03-02-2025_11:34:20_variables_many_runs"])
 
 
 # %% loop throu all tasks
@@ -47,8 +47,8 @@ for task in Task:
         plt.title("Iteration " + str(k) + ": " + text[k])
         plt.xlim([np.array(ev._xx)[:,0].min()-50, np.array(ev._xx)[:,0].max()+50])
         plt.ylim([np.array(ev._xx)[:,2].min()-50, np.array(ev._xx)[:,2].max()+20])
-        plt.show(block=False)
-        plt.close()
+        plt.show()
+        #plt.close()
 
     # %% Creating plots  tim
     #   get EV trajectory and create commonroad object (using DynamicObstacle)
@@ -75,5 +75,5 @@ for task in Task:
         plt.title("Iteration " + str(k) + ": " + text[k])
         plt.xlim([np.array(ev_comparison._xx)[:,0].min()-50, np.array(ev_comparison._xx)[:,0].max()+50])
         plt.ylim([np.array(ev_comparison._xx)[:,2].min()-50, np.array(ev_comparison._xx)[:,2].max()+20])
-        plt.show(block=False)
-        plt.close()
+        plt.show()
+        #plt.close()
