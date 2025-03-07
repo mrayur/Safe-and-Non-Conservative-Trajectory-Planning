@@ -1,4 +1,4 @@
-cvxpy==1.4.1
+cvxpy==1.6.0
 matplotlib==3.8.2
 commonroad-all==0.0.1
 commonroad-io==2023.1

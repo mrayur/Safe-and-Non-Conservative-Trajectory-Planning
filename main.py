@@ -14,7 +14,7 @@ from ev import EV
 import copy
 import pickle
 from datetime import datetime
-np.set_printoptions(suppress=True)
+np.set_printoptions(suppress=True)#避免使用科学计数法
 
 # %% Startup
 #  Set parameters and flags
