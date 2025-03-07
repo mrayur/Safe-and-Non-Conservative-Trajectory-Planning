@@ -7,6 +7,12 @@ from commonroad.scenario.trajectory import Trajectory
 from commonroad.prediction.prediction import TrajectoryPrediction
 from utilities import project_state_kb, integrate_nonlin_dynamics
 
+"""""
+1个类（4个函数）
+1.EV类：接受“初始状态”，“车辆参数”，“控制器”，“时间间隔”等4个输入，创建一个EV对象，并通过run_step函数更新车辆状态
+2.__init__: EV类的构造函数，用于初始化车辆的相关属性；将输入的初始状态initial_state通过project_state_kb函数转换为[s, d, phi, v].T的形式，并赋值给_x0。
+"""
+
 class EV:
 
     vmax = 35.0

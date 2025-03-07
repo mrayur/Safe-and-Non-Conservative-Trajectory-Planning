@@ -13,6 +13,30 @@ rlar = 90
 rclose = 10
 rllm = 10
 
+""""
+19个小函数
+1.extract_trajectory(o)：在main中调用，用于从给定的对象o中提取障碍物的预测轨迹，包括时间步列表和状态列表||main，调用了2
+2.project_state_pm(state)：假设输入为 CommonRoad 框架中的状态，输出为[x, vx, y, vy]，用于整理状态空间||extract_trajectory
+3.project_state_kb(state)：假设输入为 CommonRoad 框架中的状态，输出为[s, d, phi, v]，好像是 Frenet 坐标系中的状态空间||ev
+4.get_frenet_frame(scenario, planning_problem, n_extra_pts=300, n_back_points=10)：基于给定的场景和规划问题，生成一个曲线坐标系（包括参考路径和参考路径的单位方向向量）||main
+5.get_lane_info(scenario, curv_cosy, x0_ev_curv, ref_path = None, planning_problem_set=None, dir_ref_path = None)：基于给定的场景和规划问题，生成一个曲线坐标系（包括参考路径和参考路径的单位方向向量），在main中调用，可获取车道宽度、车道d_max和d_min||main
+6.lane_pos(x0_ev, x0_tv, lane_info)：计算所有车所位于的车道编号||determine_smpc_case，determine_cvpm_case
+7.lane_center(y0, lane_info)：好像是 Frenet 坐标系下的中心线，根据本车横向位置生成||obstacle
+8.curv_ev(x0, curv_cosy, ds=0.1, scenario=None, planning_problem_set=None, ref_path = None)：计算 Frenet 坐标系下本车初始状态。||main
+9.curv_tv(x0_tv, curv_cosy, ds=0.1)：计算 Frenet 坐标系下旁车初始状态。||main，obstacle
+10.integrate_nonlin_dynamics(x, u, T, lr, lflr_ratio, n_steps=100)：通过数值积分的方法求解非线性动力学系统。||controller，ev
+11.nl_bicycle_dynamics(x, t, u, lr, lflr_ratio)：非线性自行车模型，用于在笛卡尔坐标系中进行真实状态更新。||integrate_nonlin_dynamics
+12.curved_bicycle_matrices(x0, T, lf, lr, k, tol=1e-5)：在 Frenet 坐标系下计算车辆动力学系统的状态转移矩阵A，控制输入矩阵B，偏移向量fc，在controller中调用。||controller
+13.compute_lqr(A, B, Q, R, n_iter=4000, tol=1e-4)：预测动态障碍物的控制增益。||main
+14.truncated_gaussian(mu, sigma, a, b)：计算截断高斯分布的新均值和新方差，LQR 公式中有一个噪声项，用于这一项的模拟，以产生随机行为。||controller
+15.determine_smpc_case(x0_ev, x0_tv, xx_tv, lane_info, N, T, lwo)：遍历场景内所有目标车辆，针对其对于本车的相对位置、速度、所在车道来判定 SMPC 的类型。||controller
+16.generate_smpc_constraints(x0_ev, x0_tv, xx_tv, cases, N, cornerso, cornersev)：调用了分类结果，根据目标车辆的 SMPC 类型（如'B'、'C'、'D'等），为每个目标车辆生成约束条件。||controller
+17.determine_cvpm_case(x0_ev, x0_tv, xx_tv, lane_info, N, T, lwo)：分析目标车辆的相对位置、速度和车道差异，为每个目标车辆生成一个 CVPM 类型（CVPM 约束违反概率最小化）。||controller
+18.generate_cvpm_constraints(x0_ev, x0_tv, xx_tv, cases, N, cornerso, cornersoexp, cornersovar, cornersev, lane_info)：为目标车辆生成 CVPM 约束条件。||controller
+19.check_if_equal(constr, constr2)：检查两个约束条件constr和constr2是否相等。||没用
+"""
+
+
 #从给定的对象 o 中提取初始和预测状态信息，包括时间步列表和状态列表
 def extract_trajectory(o): #在main中调用，用以提取了障碍物的预测轨迹
     time_step_list = [o.initial_state.time_step] #以初始状态初始化
