@@ -9,7 +9,6 @@ plot_debug = False
 plot_online = False
 # plot_online = True
 
-
 #--------------------------------------------
 # %% SMPCVPM class
 class SMPCVPM:
@@ -143,7 +142,7 @@ class SMPCVPM:
                 self.plot_feasible_region_sperat(q, x0_ev=x0_ev, x0_tv=x0_tv, n=-1, title=title+' (Terminal State)', comparison=False)
             if plot_online:
                 self.plot_feasible_region(q, x0_ev, x0_tv, text=title, comparison=False)    
-                
+
         # CVPM
         if u_sol is None:
             bool_safe, constr, q, cvpm_cases = self.check_case_cvpm(x0_ev, self._u_prev, evlin, x0_tv, xrefo, lane_info)

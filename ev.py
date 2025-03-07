@@ -26,7 +26,7 @@ class EV:
         self._lflr_ratio = 0.5
         self._controller = controller
         self._T = T
-    
+
     def run_step(self, k, x0_tv, xrefo, lane_info, comparison=False):
         # Controller update in curvilinear coordinates
         if comparison:
@@ -49,4 +49,3 @@ class EV:
         return PMState(**{'position': np.array([x0[0], x0[1]]), 'time_step': k,
                             'velocity': x0[3]*math.cos(x0[2]),
                             'velocity_y': x0[3]*math.sin(x0[2])})
-

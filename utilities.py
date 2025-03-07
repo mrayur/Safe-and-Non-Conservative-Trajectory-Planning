@@ -1,22 +1,23 @@
-import numpy as np
-from scipy.stats import norm
-import math
-import cmath
-from scipy.integrate import odeint
+import numpy as np #高性能的多维数组对象以及各种数学函数，用于数值计算、矩阵运算
+from scipy.stats import norm #scipy基于numpy的科学计算库，scipy.stats提供大量概率分布和统计函数，norm类代表正态分布
+import math  #基本数学库，基本数学函数，三角函数、平方根等
+import cmath #复杂数学库，复数的平方根、对数
+from scipy.integrate import odeint #SciPy 库中的一个子模块，主要用于数值积分和求解常微分方程（ODEs），odeint用于求解常微分方程（ODE）的数值解
 from commonroad_route_planner.route_planner import RoutePlanner
-from commonroad_dc.geometry.util import chaikins_corner_cutting, resample_polyline
-from commonroad_dc.pycrccosy import CurvilinearCoordinateSystem
-from commonroad.visualization.mp_renderer import MPRenderer
-import matplotlib.pyplot as plt
+from commonroad_dc.geometry.util import chaikins_corner_cutting, resample_polyline #chaikins_corner_cutting：多边形角切割，常用于图形的平滑处理；resample_polyline：多边形线重采样，以改变其点的密度或进行插值等操作。
+from commonroad_dc.pycrccosy import CurvilinearCoordinateSystem #例如笛卡尔坐标系转换为曲线坐标系
+from commonroad.visualization.mp_renderer import MPRenderer #渲染 CommonRoad 场景的渲染器，用于将场景中的道路、车辆等元素可视化显示
+import matplotlib.pyplot as plt #绘图库
 
 rlar = 90
 rclose = 10
 rllm = 10
 
-def extract_trajectory(o):
-    time_step_list = [o.initial_state.time_step]
-    state_list = [project_state_pm(o._initial_state)]
-    for state in o._prediction.trajectory.state_list:
+#从给定的对象 o 中提取初始和预测状态信息，包括时间步列表和状态列表
+def extract_trajectory(o): #在main中调用，用以提取了障碍物的预测轨迹
+    time_step_list = [o.initial_state.time_step] #以初始状态初始化
+    state_list = [project_state_pm(o._initial_state)]#以初始状态初始化
+    for state in o._prediction.trajectory.state_list: #添加预测信息
         time_step_list.append(state.time_step)
         state_list.append(project_state_pm(state))
     #   check data point in trajectory are properly ordered
@@ -26,19 +27,22 @@ def extract_trajectory(o):
     return (time_step_list, state_list)
 
 """"
-    assumes commonroad framework as input, and [x, vx, y, vy] as output
+    assumes commonroad framework as input, and [x, vx, y, vy] as output，整理状态空间
 """
+
 def project_state_pm(state):
     return np.array([state.position[0], state.velocity*math.cos(state.orientation),
                       state.position[1], state.velocity*math.sin(state.orientation)])
 
 """"
-    assumes commonroad framework as input, and [s, d, phi, v] as output
+    assumes commonroad framework as input, and [s, d, phi, v] as output，好像是Frenet坐标系中的状态空间
 """
 def project_state_kb(state):
     return np.array([state.position[0], state.position[1],
                       state.orientation, state.velocity])
-
+"""
+    基于给定的场景和规划问题，生成一个曲线坐标系(包括参考路径和参考路径的单位方向向量)，在mian中调用
+"""
 def get_frenet_frame(scenario, planning_problem, n_extra_pts=300, n_back_points=10):
     # based on https://commonroad.in.tum.de/docs/commonroad-drivability-checker/sphinx/06_curvilinear_coordinate_system.html
     route_planner = RoutePlanner(scenario, planning_problem, backend=RoutePlanner.Backend.NETWORKX_REVERSED)
@@ -66,8 +70,11 @@ def get_frenet_frame(scenario, planning_problem, n_extra_pts=300, n_back_points=
     new_points = ref_path[0, :] - dir_ref_path*np.arange(n_extra_pts, 0, -1).reshape(-1, 1)
     ref_path = np.vstack((new_points, ref_path))
     
-    return CurvilinearCoordinateSystem(ref_path, 50.0, 0.1), ref_path, dir_ref_path
+    return CurvilinearCoordinateSystem(ref_path, 50.0, 0.1), ref_path, dir_ref_path   #获取Frenet坐标系，参考路径，参考路径单位方向向量
 
+"""
+    基于给定的场景和规划问题，生成一个曲线坐标系(包括参考路径和参考路径的单位方向向量)，在mian中调用
+"""
 def get_lane_info(scenario, curv_cosy, x0_ev_curv, ref_path = None, planning_problem_set=None, dir_ref_path = None):
     lanelets = scenario._lanelet_network._lanelets
     first_lane = True
@@ -116,17 +123,17 @@ def get_lane_info(scenario, curv_cosy, x0_ev_curv, ref_path = None, planning_pro
     if d_max-d_min<0.5:
         print('\nProblem curvilinear cosy, Tommaso must fix it\n')
         breakpoint()
-    return {'wlane': w_lane, 'd_min': d_min, 'd_max': d_max}
+    return {'wlane': w_lane, 'd_min': d_min, 'd_max': d_max} #车道宽度、车道d_max和d_min
 
 def lane_pos(x0_ev, x0_tv, lane_info):
     lane_ev = np.round(x0_ev[1]/lane_info['wlane'])
     lane_tvs = []
     for x0_tvi in x0_tv:
         lane_tvs.append(np.round(x0_tvi[2]/lane_info['wlane']))
-    return lane_ev, lane_tvs
+    return lane_ev, lane_tvs #所有车所位于的车道编号
 
 def lane_center(y0, lane_info):
-        return lane_info['wlane']*np.round(y0/lane_info['wlane'])
+        return lane_info['wlane']*np.round(y0/lane_info['wlane']) #好像是Frenet坐标系下的中心线，根据本车横向位置生成的
 
 def curv_ev(x0, curv_cosy, ds=0.1, scenario=None, planning_problem_set=None, ref_path = None):
     try:
@@ -151,7 +158,7 @@ def curv_ev(x0, curv_cosy, ds=0.1, scenario=None, planning_problem_set=None, ref
     x0_curv = x0+0  #   do not change initial param
     x0_curv[:2] = x0_proj
     x0_curv[2]-=theta
-    return x0_curv
+    return x0_curv #Frenet坐标系下本车初始状态
 
 def curv_tv(x0_tv, curv_cosy, ds=0.1):
     try:
@@ -169,15 +176,14 @@ def curv_tv(x0_tv, curv_cosy, ds=0.1):
     x0_tv_curv[0:4:2] = x0_proj
     x0_tv_curv[1] = vnorm*np.cos(phi)
     x0_tv_curv[3] = vnorm*np.sin(phi)
-    return x0_tv_curv
+    return x0_tv_curv #Frenet坐标系下旁车初始状态
 
 """
-     nonlinear method of AV dynamics
+     nonlinear method of AV dynamics，通过数值积分的方法求解非线性动力学系统
 """
 def integrate_nonlin_dynamics(x, u, T, lr, lflr_ratio, n_steps=100):
     x_seq = odeint(nl_bicycle_dynamics, x, np.linspace(0, T, n_steps), args=(u, lr, lflr_ratio))
-    return np.array(x_seq[-1, :])
-
+    return np.array(x_seq[-1, :]) #返回一个numpy数组，表示时间T后系统的状态
 """
      nonlinear bicycle model for real state update in cartesian coordinates
 """
@@ -188,13 +194,10 @@ def nl_bicycle_dynamics(x, t, u, lr, lflr_ratio):
                     x[3]*math.sin(theta),
                     x[3]*math.sin(al_)/lr,
                     u[0]])
-    
-    
-    
 """
     numerically evaluates matrices of linearized discretized bicycle model in Frenet coordinates
 """
-def curved_bicycle_matrices(x0, T, lf, lr, k, tol=1e-5):
+def curved_bicycle_matrices(x0, T, lf, lr, k, tol=1e-5): #controller中调用
     d = x0[1]
     v = x0[3]
     c0 = np.cos(x0[2])
@@ -291,9 +294,9 @@ def curved_bicycle_matrices(x0, T, lf, lr, k, tol=1e-5):
     q2 = np.cos(x0[2])
     q3 = x0[3]*q2*q1
     fc = np.array([q3, x0[3]*np.sin(x0[2]), -k*q3, 0])
-    return {"A": A.real, "B": B.real, "fc": fc.real}
+    return {"A": A.real, "B": B.real, "fc": fc.real} #Frenet坐标系下 车辆动力学系统的状态转移矩阵A，控制输入矩阵B，偏移向量fc
 
-
+#预测动态障碍物的控制增益
 def compute_lqr(A, B, Q, R, n_iter=4000, tol=1e-4):
     P = 10+Q
     for h in range(n_iter):
@@ -309,6 +312,7 @@ def compute_lqr(A, B, Q, R, n_iter=4000, tol=1e-4):
                 K[i, j] = 0
     return K
 
+#计算截断高斯分布的新均值和新方差，LQR公式中有一个噪声项，用于这一项的模拟，以产生随机行为
 def truncated_gaussian(mu, sigma, a, b):
     mu_new = np.zeros(a.shape)
     sigma_new = np.zeros(a.shape)
@@ -326,21 +330,22 @@ def truncated_gaussian(mu, sigma, a, b):
         sigma_new[k] = sigma[k]**2*(1-(beta*phib-alpha*phia)/dPhi-ratiod**2)
     return mu_new, sigma_new
 
+#遍历场景内所有目标车辆，针对其对于本车的相对位置、速度、所在车道来判定SMPC的类型
 def determine_smpc_case(x0_ev, x0_tv, xx_tv, lane_info, N, T, lwo):
     lane_ev, lane_tv = lane_pos(x0_ev, x0_tv, lane_info)
     cases = []
     for i in range(len(x0_tv)):
-        casei = 'A' # no constraints
-        ds = x0_ev[0]-x0_tv[i][0]
-        dv = x0_ev[3]-x0_tv[i][1]
-        fclose = rclose+np.max(dv*N*T, 0)
-        if -rlar<=ds<=rlar:
-            if ds <= -fclose:  casei = 'B'
+        casei = 'A' # no constraints，ds > rlar，相距较远
+        ds = x0_ev[0]-x0_tv[i][0] #相对位置
+        dv = x0_ev[3]-x0_tv[i][1] #相对速度
+        fclose = rclose+np.max(dv*N*T, 0) #根据车速修正过的安全距离阈值
+        if -rlar<=ds<=rlar: #rlar阈值范围内
+            if ds <= -fclose:  casei = 'B' #前方较近，fclose-rlar之间车辆
             # if fclose <= ds:  casei = 'C' #   from Tim, but makes more sense with ds>=0 in general
-            if 0 <= ds:  casei = 'C'
-            if -fclose <= ds <= 0 and lane_ev == lane_tv[i]:    casei = 'D'
-            if lane_ev+1 == lane_tv[i]:
-                if -fclose <= ds and x0_ev[0]+0.5*lwo[i][1]+rllm <= x0_tv[i][0]:
+            if 0 <= ds:  casei = 'C' #后方rlar-0之间车辆
+            if -fclose <= ds <= 0 and lane_ev == lane_tv[i]:    casei = 'D' #同车道前方fclose-0之间车辆
+            if lane_ev+1 == lane_tv[i]:#旁车道
+                if -fclose <= ds and x0_ev[0]+0.5*lwo[i][1]+rllm <= x0_tv[i][0]: #lwo目标车辆宽度和长度等尺寸信息
                     if dv>=0:   casei = 'E'
                     else:   casei = 'E2'
                 if -fclose <= ds <= 0 and x0_ev[0]+0.5*lwo[i][1]+rllm >= x0_tv[i][0]:
@@ -355,6 +360,7 @@ def determine_smpc_case(x0_ev, x0_tv, xx_tv, lane_info, N, T, lwo):
         cases = [item if item != 'D' and item != 'E' else 'B' for item in cases]
     return cases
 
+#调用了分类结果，根据目标车辆的 SMPC 类型（如 'B'、'C'、'D' 等），为每个目标车辆生成约束条件
 def generate_smpc_constraints(x0_ev, x0_tv, xx_tv, cases, N, cornerso, cornersev):
     qs, qd, qt = [[] for k in range(N)], [[] for k in range(N)], [[] for k in range(N)]
     for i in range(len(xx_tv)):
@@ -401,9 +407,9 @@ def generate_smpc_constraints(x0_ev, x0_tv, xx_tv, cases, N, cornerso, cornersev
                 qs[k].append(0.0)
                 qd[k].append(0.0)
                 qt[k].append(0.0)
-    return {'s': np.asarray(qs), 'd': np.asarray(qd), 't': np.asarray(qt)}
+    return {'s': np.asarray(qs), 'd': np.asarray(qd), 't': np.asarray(qt)}#每个约束的 qs 数组，表示每个约束的状态部分，每个约束的 qd 数组，表示每个约束的速度部分，每个约束的 qt 数组，表示每个约束的目标部分
 
-def determine_cvpm_case(x0_ev, x0_tv, xx_tv, lane_info, N, T, lwo):
+def determine_cvpm_case(x0_ev, x0_tv, xx_tv, lane_info, N, T, lwo): #CVPM约束违反概率最小化
     lane_ev, lane_tv = lane_pos(x0_ev, x0_tv, lane_info)
     cases = []
     for i in range(len(x0_tv)):
@@ -429,7 +435,7 @@ def determine_cvpm_case(x0_ev, x0_tv, xx_tv, lane_info, N, T, lwo):
             if ds>0 and dlane==0:
                 casei = 'C'
         cases.append(casei)
-    return cases
+    return cases #分析目标车辆的相对位置、速度和车道差异，为每个目标车辆生成一个 CVPM 类型
 
 def generate_cvpm_constraints(x0_ev, x0_tv, xx_tv, cases, N, cornerso, cornersoexp, cornersovar, cornersev, lane_info):
     qs, qd, qt = [[] for k in range(N)], [[] for k in range(N)], [[] for k in range(N)]
