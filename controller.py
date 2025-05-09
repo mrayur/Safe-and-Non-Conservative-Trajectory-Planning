@@ -2,7 +2,36 @@ import numpy as np
 import cvxpy as cvx
 from utilities import curved_bicycle_matrices, truncated_gaussian, determine_smpc_case, generate_smpc_constraints, determine_cvpm_case, generate_cvpm_constraints, integrate_nonlin_dynamics, check_if_equal
 import matplotlib.pyplot as plt
-
+"""
+1个类，22个函数
+1,_init_:美的构這函数，用于初始化类的实例。
+2.run_step：根据 ego 车辆的当前状态 x0_ev、目标车辆的当前状态 x0_tv、目标车辆的参考状态 xrefo、车道信息 lane_info 以及车道的最大和最小限制 dmaxlane、dminlane 来计算控制输入；在ev.py中的run_step被调用
+3.run_step_comparison：run_step 是一个基本的控制步骤函数，主要负责执行 SMPC 控制并处理相关逻辑。run_step_comparison 是一个扩展功能函数，在 run_step 的基础上增加了与 CVPM 方法的比较，根据比较结果选择更合适的控制输入，同时提供了更多的信息输出，方便调试和分析。
+4.update_applied_input：更新应用的输入，将当前的输入 u 和状态 x0 进行更新
+5.update_backup：更新备份输入，u_new 为新的输入，tail 参数控制是否更新备份输入的尾部。
+6.check_smpc_safety：计算 ego 车辆的下一个状态 x1，并评估是否存在满足约束的解，用于检查 SMPC（模型预测控制）的安全性。
+7.solve_ftp_next：计算 ego 车辆的下一个状态 x1
+8.smpc_constraints：计算基于目标车辆的 SMPC 约束条件，返回一个包含约束信息的字典。
+9.cvpm_constraints：计算基于目标车辆的 CVPM约束条件，返回一个包含约束信息的字典。
+10.isFeasible：检查约束集合是否为空或是否存在可行解，返回一个布尔值表示是否可行，以及约束列表
+11.solve_smpc：求解 SMPC 问题，根据 ego 车辆的当前状态 x0_ev、车辆动态模型 evlin 和约束信息 q 来计算最优控制输入。
+12.check_case_cvpm：计算 CVPM 的安全情况的约束条件，并检查该约束集合是否可行，返回一个布尔值表示安全情况是否可行，以及安全情况的约束列表。
+13.solve_cvpm_safe_case：基于安全情况的约束条件，优化成本函数，返回最优输入序列。
+14.solve_cvpm_probabilistic_case：构建用于概率优化的集合，并找到使约束违反概率最小的 ego 车辆的输入序列。
+15.obtain_corners_o：获取目标车辆的角点信息，可能用于碰撞检测或路径规划。
+16.add_velocity_cornerso：加速度相关的目标车辆角点信息，可能用于考虑车辆速度的影响。
+17.prediction_covariance：计算预测的协方差，可能用于不确定性分析或滤波算法。
+18.predict_trajectory_obstacles：预测障碍物（目标车辆）的轨迹。
+19.plot_feasible_region：绘制可行区域，即在街道的 (s, d) 坐标框架下绘制第一个和第 N 个 q 约束部分。
+20.plot_feasible_region_sperat：与 plot_feasible_region 类似，绘制可行区域，但可能有不同的参数设置或绘图细节。
+21.get_reachable_sets：获取可达集合，可能用于分析车辆在不同状态下能够到达的区域。
+22.print_applied_method：打印应用的方法，可能用于调试或记录控制器使用的方法。
+23.print_average_stage_cost：打印平均阶段成本，可能用于评估控制器的性能。
+24.add_iteration_time_counters：添加迭代时间计数器，可能用于记录控制器的迭代时间。
+25.print_computation_times：打印计算时间，可能用于性能分析。
+26.where_used：检查某个列表在哪些地方被使用，可能用于调试或代码分析。
+27.compute_comp_time_branches：计算计算时间的分支，可能用于分析不同分支的计算时间。
+"""
 # %% Select if you want plots while running the controller
 plot_debug = False
 # plot_debug = True
@@ -10,7 +39,7 @@ plot_online = False
 # plot_online = True
 
 #--------------------------------------------
-# %% SMPCVPM class
+# %% SMPCVPM class，只有一个类
 class SMPCVPM:
     def __init__(self, T, N, Ao, Bo, Ko, umaxo, umino, P_w, P_v, lwo, v_amp, lwev, vehicle_params,
                  vmaxev, vminev, umaxev, uminev, dumaxev, xref_ev=np.array([0, 0, 0, 27]),
@@ -175,7 +204,21 @@ class SMPCVPM:
         self.input_sequences.append(u_sol)
         self.update_applied_input(u_sol, x0_ev, comparison=False)
         return u_sol[:, 0]
-    
+
+    def add_iteration_time_counters(self, comparison=False):
+        if comparison:
+            self._comp_time_smpc_comparison.append(-1)
+            self._comp_time_ftp_now_comparison.append(-1)
+            self._comp_time_ftp_next_comparison.append(-1)
+            # self._comp_time_smpc_branch_comparison.append(-1)
+            # self._comp_time_ftp_branch_comparison.append(-1)
+        else:
+            self._comp_time_smpc.append(-1)
+            self._comp_time_cvpm1.append(-1)
+            self._comp_time_cvpm2.append(-1)
+            self._comp_time_isFeasible.append(-1)
+            self._comp_time_case_cvpm.append(-1)
+
     def run_step_comparison(self, x0_ev, x0_tv, xrefo, lane_info, dmaxlane, dminlane):
         self.counter_comparison = self.counter_comparison + 1
         self.add_iteration_time_counters(comparison=True)
@@ -239,7 +282,7 @@ class SMPCVPM:
         self.update_applied_input(u_sol, x0_ev, comparison=True)
         return u_sol[:, 0]  
 
-    def update_applied_input(self, u, x0, comparison=False):
+    def update_applied_input(self, u, x0, comparison=False): #在上面的run_step和run_step_comparison被调用了
         curr_stage_cost = (cvx.quad_form(x0-self._xref_ev, self._Q_ev)\
                 + cvx.quad_form(u[:, 0], self._R_ev)).value
         if comparison:
@@ -259,7 +302,6 @@ class SMPCVPM:
             self._u_backup_comparison = np.hstack((u_new[:, 1:], 0*u_new[:, 0].reshape((-1, 1))))
         else:
             self._u_backup_comparison = u_new
-            
 
     def check_smpc_safety(self, x0_ev, u_prev, evlin_prev, x0_tv, xrefo, lane_info):
         """
@@ -418,6 +460,83 @@ class SMPCVPM:
         q['cases'] = cvpm_cases
         return q, cvpm_cases
 
+    def get_reachable_sets(self, x0_tv, xrefo, x0_ev):#在cvpm_constraints被调用
+        corners = [dict() for x0 in x0_tv]
+        convex_hull = [[[] for k in range(4)] for x0 in x0_tv]
+        cornersoexp = [[[] for k in range(4)] for x0 in x0_tv]
+        cornersovar = [[[] for k in range(4)] for x0 in x0_tv]
+        for i in range(len(x0_tv)):
+            lwoi = self._lwo[i]
+            #   no braking distance here, worst-case scenario approach
+            #   initialize with min/max x0tv and with physical shape (full length, to account for ev!)
+            corners[i]['fl'] = [np.array([x0_tv[i][0]+self._v_amp[i][0]+lwoi[0],  # max posx
+                                          x0_tv[i][1] + \
+                                          self._v_amp[i][1],  # max vx
+                                          x0_tv[i][2]+self._v_amp[i][2] + \
+                                          lwoi[1],  # max posy
+                                          x0_tv[i][3]+self._v_amp[i][3]])]  # max vy
+            corners[i]['rr'] = [np.array([x0_tv[i][0]-self._v_amp[i][0]-lwoi[0],  # min posx
+                                          x0_tv[i][1] - \
+                                          self._v_amp[i][1],  # min vx
+                                          x0_tv[i][2]-self._v_amp[i][2] - \
+                                          lwoi[1],  # min posy
+                                          x0_tv[i][3]-self._v_amp[i][3]])]  # min vy
+            corners[i]['cen'] = [x0_tv[i]]  # expected value
+            for k in range(self._N):
+                corners[i]['fl'].append(self._Ao@corners[i]['fl'][-1]+self._Bo@self._umaxo[i])  # max ax, max ay
+                corners[i]['rr'].append(self._Ao@corners[i]['rr'][-1]+self._Bo@self._umino[i])  # min ax, min ay
+                #   take convex hull (NB: max/min is needed because the order is swapped if a TV goes in other direction)
+                convex_hull[i][0].append(np.array([max(corners[i]['fl'][k][0], corners[i]['fl'][k+1][0]),  # max x
+                                                   max(corners[i]['fl'][k][2], corners[i]['fl'][k+1][2])]))  # max y
+                convex_hull[i][1].append(np.array([min(corners[i]['rr'][k][0], corners[i]['rr'][k+1][0]),  # min x
+                                                   max(corners[i]['fl'][k][2], corners[i]['fl'][k+1][2])]))  # max y
+                convex_hull[i][2].append(np.array([min(corners[i]['rr'][k][0], corners[i]['rr'][k+1][0]),  # min x
+                                                   min(corners[i]['rr'][k][2], corners[i]['rr'][k+1][2])]))  # min y
+                convex_hull[i][3].append(np.array([max(corners[i]['fl'][k][0], corners[i]['fl'][k+1][0]),  # max x
+                                                   min(corners[i]['rr'][k][2], corners[i]['rr'][k+1][2])]))  # min y
+                corners[i]['cen'].append(self._Ao@corners[i]['cen'][-1]+self._Bo@np.minimum(self._umaxo[i],
+                                                                                            np.maximum(self._umino[i], self._Ko[i]@(corners[i]['cen'][-1]-xrefo[i]))))
+                #   truncated Gaussian corners
+                mu, sigma = truncated_gaussian(corners[i]['cen'][-1][0:4:2]+lwoi,    # max x, max y
+                                               np.diag(self._PP_o[i][k])[0:4:2],
+                                               np.minimum(corners[i]['rr'][k][0:4:2],
+                                               corners[i]['rr'][k+1][0:4:2])+lwoi,  # max x, max y
+                                               np.maximum(corners[i]['fl'][k][0:4:2],
+                                                          corners[i]['fl'][k+1][0:4:2]))    # max x, max y
+                cornersoexp[i][0].append(mu)
+                cornersovar[i][0].append(sigma)
+                mu, sigma = truncated_gaussian(corners[i]['cen'][-1][0:4:2]
+                                               + np.multiply(lwoi, np.array([-1, 1])),    # min x, max y
+                                               np.diag(self._PP_o[i][k])[0:4:2],
+                                               np.minimum(corners[i]['rr'][k][0:4:2],   # min x, max y
+                                                          corners[i]['rr'][k+1][0:4:2])
+                                               + np.multiply(lwoi, np.array([0, 1])),
+                                               np.maximum(corners[i]['fl'][k][0:4:2],  # min x, max y
+                                                          corners[i]['fl'][k+1][0:4:2])
+                                               + np.multiply(lwoi, np.array([-1, 0])))
+                cornersoexp[i][1].append(mu)
+                cornersovar[i][1].append(sigma)
+                mu, sigma = truncated_gaussian(corners[i]['cen'][-1][0:4:2]-lwoi,   # min x, min y
+                                               np.diag(self._PP_o[i][k])[0:4:2],
+                                               np.minimum(corners[i]['rr'][k][0:4:2],  # min x, min y
+                                                          corners[i]['rr'][k+1][0:4:2]),
+                                               np.maximum(corners[i]['fl'][k][0:4:2],
+                                                          corners[i]['fl'][k+1][0:4:2])-lwoi)  # min x, min y
+                cornersoexp[i][2].append(mu)
+                cornersovar[i][2].append(sigma)
+                mu, sigma = truncated_gaussian(corners[i]['cen'][-1][0:4:2]
+                                               + np.multiply(lwoi, np.array([1, -1])),    # max x, min y
+                                               np.diag(self._PP_o[i][k])[0:4:2],
+                                               np.minimum(corners[i]['rr'][k][0:4:2],   # max x, min y
+                                                          corners[i]['rr'][k+1][0:4:2])
+                                               + np.multiply(lwoi, np.array([1, 0])),
+                                               np.maximum(corners[i]['fl'][k][0:4:2],  # max x, min y
+                                                          corners[i]['fl'][k+1][0:4:2])
+                                               + np.multiply(lwoi, np.array([0, -1])))
+                cornersoexp[i][3].append(mu)
+                cornersovar[i][3].append(sigma)
+        return convex_hull, cornersoexp, cornersovar
+
     def isFeasible(self, x0_ev, u_prev, evlin, q, comparison=False, check_safety=True):
         """
         Function to check if the set of constraints is empty or a feasible solution exists
@@ -520,7 +639,7 @@ class SMPCVPM:
         bool_safe, constr = self.isFeasible(x0_ev, u_prev, evlin, q, comparison=comparison, check_safety=False)
         return bool_safe, constr, q, cvpm_cases
 
-    def solve_cvpm_safe_case(self, constr, comparison=False):
+    def solve_cvpm_safe_case(self, constr, comparison=False):#run_step，run_step_comparision
         """
         Optimize the cost function based on the constraints
 
@@ -544,7 +663,7 @@ class SMPCVPM:
             prob.solve()
             return self._u_smpc.value, prob._status
 
-    def solve_cvpm_probabilistic_case(self, x0_ev, x0_tv, xrefo, u_prev, evlin, lane_info):
+    def solve_cvpm_probabilistic_case(self, x0_ev, x0_tv, xrefo, u_prev, evlin, lane_info):#在run_step中被调用
         """
         construct set for the probabilistic optimization and find the input sequence of the
         ego vehicle leading to the minimal probability of constraint violation 
@@ -604,7 +723,7 @@ class SMPCVPM:
             return np.zeros(self._u_smpc.shape)
         return self._u_smpc.value, q, cvpm_cases
     
-    def obtain_corners_o(N, lwo, beta, PP_o):
+    def obtain_corners_o(N, lwo, beta, PP_o):#在__init__中被调用一次
         cornerso = []
         kappa = -2*np.log(1-beta)
         for i in range(len(PP_o)):
@@ -622,7 +741,7 @@ class SMPCVPM:
             cornerso.append(cornersi)
         return cornerso
 
-    def add_velocity_cornerso(self, x0_ev, x0_tv):
+    def add_velocity_cornerso(self, x0_ev, x0_tv):#smpc_constraints中被调用一次
         cornerso = []
         for i in range(len(self._cornerso)):
             cornersi = [[] for _ in self._cornerso[i]]
@@ -641,7 +760,7 @@ class SMPCVPM:
             cornerso.append(cornersi)
         return cornerso
 
-    def prediction_covariance(Ao, Bo, Ko, N, P_w, P_0):
+    def prediction_covariance(Ao, Bo, Ko, N, P_w, P_0): #在__init__中被调用
         PP_tv = []
         for i in range(len(Ko)):
             Acl = Ao+Bo@Ko[i]
@@ -651,7 +770,7 @@ class SMPCVPM:
             PP_tv.append(PP_tvi[1:])
         return PP_tv
 
-    def predict_trajectory_obstacles(self, x0_tv, xrefo):
+    def predict_trajectory_obstacles(self, x0_tv, xrefo):#在smpc_constraints、cvpm_constraints中被调用
         xx_tv = []
         for i in range(len(x0_tv)):
             xx_tvi = [x0_tv[i]]
@@ -812,83 +931,6 @@ class SMPCVPM:
                            ', Blue: EV, Red: TV which produces the shown constraint, Green: all other TVs, Green area: Feasible region due to red TV', fontsize=8)
         plt.show()
 
-    def get_reachable_sets(self, x0_tv, xrefo, x0_ev):
-        corners = [dict() for x0 in x0_tv]
-        convex_hull = [[[] for k in range(4)] for x0 in x0_tv]
-        cornersoexp = [[[] for k in range(4)] for x0 in x0_tv]
-        cornersovar = [[[] for k in range(4)] for x0 in x0_tv]
-        for i in range(len(x0_tv)):
-            lwoi = self._lwo[i]
-            #   no braking distance here, worst-case scenario approach
-            #   initialize with min/max x0tv and with physical shape (full length, to account for ev!)
-            corners[i]['fl'] = [np.array([x0_tv[i][0]+self._v_amp[i][0]+lwoi[0],  # max posx
-                                          x0_tv[i][1] + \
-                                          self._v_amp[i][1],  # max vx
-                                          x0_tv[i][2]+self._v_amp[i][2] + \
-                                          lwoi[1],  # max posy
-                                          x0_tv[i][3]+self._v_amp[i][3]])]  # max vy
-            corners[i]['rr'] = [np.array([x0_tv[i][0]-self._v_amp[i][0]-lwoi[0],  # min posx
-                                          x0_tv[i][1] - \
-                                          self._v_amp[i][1],  # min vx
-                                          x0_tv[i][2]-self._v_amp[i][2] - \
-                                          lwoi[1],  # min posy
-                                          x0_tv[i][3]-self._v_amp[i][3]])]  # min vy
-            corners[i]['cen'] = [x0_tv[i]]  # expected value
-            for k in range(self._N):
-                corners[i]['fl'].append(self._Ao@corners[i]['fl'][-1]+self._Bo@self._umaxo[i])  # max ax, max ay
-                corners[i]['rr'].append(self._Ao@corners[i]['rr'][-1]+self._Bo@self._umino[i])  # min ax, min ay
-                #   take convex hull (NB: max/min is needed because the order is swapped if a TV goes in other direction)
-                convex_hull[i][0].append(np.array([max(corners[i]['fl'][k][0], corners[i]['fl'][k+1][0]),  # max x
-                                                   max(corners[i]['fl'][k][2], corners[i]['fl'][k+1][2])]))  # max y
-                convex_hull[i][1].append(np.array([min(corners[i]['rr'][k][0], corners[i]['rr'][k+1][0]),  # min x
-                                                   max(corners[i]['fl'][k][2], corners[i]['fl'][k+1][2])]))  # max y
-                convex_hull[i][2].append(np.array([min(corners[i]['rr'][k][0], corners[i]['rr'][k+1][0]),  # min x
-                                                   min(corners[i]['rr'][k][2], corners[i]['rr'][k+1][2])]))  # min y
-                convex_hull[i][3].append(np.array([max(corners[i]['fl'][k][0], corners[i]['fl'][k+1][0]),  # max x
-                                                   min(corners[i]['rr'][k][2], corners[i]['rr'][k+1][2])]))  # min y
-                corners[i]['cen'].append(self._Ao@corners[i]['cen'][-1]+self._Bo@np.minimum(self._umaxo[i],
-                                                                                            np.maximum(self._umino[i], self._Ko[i]@(corners[i]['cen'][-1]-xrefo[i]))))
-                #   truncated Gaussian corners
-                mu, sigma = truncated_gaussian(corners[i]['cen'][-1][0:4:2]+lwoi,    # max x, max y
-                                               np.diag(self._PP_o[i][k])[0:4:2],
-                                               np.minimum(corners[i]['rr'][k][0:4:2],
-                                               corners[i]['rr'][k+1][0:4:2])+lwoi,  # max x, max y
-                                               np.maximum(corners[i]['fl'][k][0:4:2],
-                                                          corners[i]['fl'][k+1][0:4:2]))    # max x, max y
-                cornersoexp[i][0].append(mu)
-                cornersovar[i][0].append(sigma)
-                mu, sigma = truncated_gaussian(corners[i]['cen'][-1][0:4:2]
-                                               + np.multiply(lwoi, np.array([-1, 1])),    # min x, max y
-                                               np.diag(self._PP_o[i][k])[0:4:2],
-                                               np.minimum(corners[i]['rr'][k][0:4:2],   # min x, max y
-                                                          corners[i]['rr'][k+1][0:4:2])
-                                               + np.multiply(lwoi, np.array([0, 1])),
-                                               np.maximum(corners[i]['fl'][k][0:4:2],  # min x, max y
-                                                          corners[i]['fl'][k+1][0:4:2])
-                                               + np.multiply(lwoi, np.array([-1, 0])))
-                cornersoexp[i][1].append(mu)
-                cornersovar[i][1].append(sigma)
-                mu, sigma = truncated_gaussian(corners[i]['cen'][-1][0:4:2]-lwoi,   # min x, min y
-                                               np.diag(self._PP_o[i][k])[0:4:2],
-                                               np.minimum(corners[i]['rr'][k][0:4:2],  # min x, min y
-                                                          corners[i]['rr'][k+1][0:4:2]),
-                                               np.maximum(corners[i]['fl'][k][0:4:2],
-                                                          corners[i]['fl'][k+1][0:4:2])-lwoi)  # min x, min y
-                cornersoexp[i][2].append(mu)
-                cornersovar[i][2].append(sigma)
-                mu, sigma = truncated_gaussian(corners[i]['cen'][-1][0:4:2]
-                                               + np.multiply(lwoi, np.array([1, -1])),    # max x, min y
-                                               np.diag(self._PP_o[i][k])[0:4:2],
-                                               np.minimum(corners[i]['rr'][k][0:4:2],   # max x, min y
-                                                          corners[i]['rr'][k+1][0:4:2])
-                                               + np.multiply(lwoi, np.array([1, 0])),
-                                               np.maximum(corners[i]['fl'][k][0:4:2],  # max x, min y
-                                                          corners[i]['fl'][k+1][0:4:2])
-                                               + np.multiply(lwoi, np.array([0, -1])))
-                cornersoexp[i][3].append(mu)
-                cornersovar[i][3].append(sigma)
-        return convex_hull, cornersoexp, cornersovar
-
     def print_applied_method(self, comparison=False):
         if comparison:
             texts = self.applied_method_comparison
@@ -899,30 +941,14 @@ class SMPCVPM:
         for j in range(len(texts)):
             print('Iteration: ', j, texts[j])
         print()
-        
     
-    def print_average_stage_cost(self):
+    def print_average_stage_cost(self):#在main.py中被调用
         self.__cost = np.average(self.stage_cost_sequence)
         print('\n\nAverage stage cost: ', self.__cost)
         self.__cost_comparison = np.average(self.stage_cost_sequence_comparison)
         print('Average stage cost (comparison): ', self.__cost_comparison)
-        
-        
-    def add_iteration_time_counters(self, comparison=False):
-        if comparison:
-            self._comp_time_smpc_comparison.append(-1)
-            self._comp_time_ftp_now_comparison.append(-1)
-            self._comp_time_ftp_next_comparison.append(-1)
-            # self._comp_time_smpc_branch_comparison.append(-1)
-            # self._comp_time_ftp_branch_comparison.append(-1)
-        else:
-            self._comp_time_smpc.append(-1)
-            self._comp_time_cvpm1.append(-1)
-            self._comp_time_cvpm2.append(-1)
-            self._comp_time_isFeasible.append(-1)
-            self._comp_time_case_cvpm.append(-1)
             
-    def print_computation_times(self):
+    def print_computation_times(self):#在main.py中被调用了一次
         self.compute_comp_time_branches()
         
         print('\nSuggested method (SMPC+CVPM)')
@@ -1017,13 +1043,8 @@ class SMPCVPM:
         else:
             self.__time_ftpbranch_comparison_average = -1
             self.__time_ftpbranch_comparison_max = -1
-            
-            
-            
-    def where_used(self, list_):
-        return [el for el in list_ if el>0]
     
-    def compute_comp_time_branches(self):
+    def compute_comp_time_branches(self):#在print_computation_times
         
         self.comp_time_smpc_branch = []
         self.comp_time_cvpm_branch = []
@@ -1053,3 +1074,5 @@ class SMPCVPM:
                 curr_smpc_comparison+=self._comp_time_ftp_next_comparison[k]
             self.comp_time_smpc_branch_comparison.append(curr_smpc_comparison)
         
+    def where_used(self, list_): #该新列表包含输入列表中所有大于 0 的元素；在print_computation_times和compute_comp_time_branches
+        return [el for el in list_ if el>0]

@@ -65,7 +65,7 @@ def project_state_kb(state):
     return np.array([state.position[0], state.position[1],
                       state.orientation, state.velocity])
 """
-    基于给定的场景和规划问题，生成一个曲线坐标系(包括参考路径和参考路径的单位方向向量)，在mian中调用
+    基于给定的场景和规划问题，生成一个曲线坐标系(包括参考路径和参考路径的单位方向向量)，在main中调用
 """
 def get_frenet_frame(scenario, planning_problem, n_extra_pts=300, n_back_points=10):
     # based on https://commonroad.in.tum.de/docs/commonroad-drivability-checker/sphinx/06_curvilinear_coordinate_system.html
@@ -94,10 +94,10 @@ def get_frenet_frame(scenario, planning_problem, n_extra_pts=300, n_back_points=
     new_points = ref_path[0, :] - dir_ref_path*np.arange(n_extra_pts, 0, -1).reshape(-1, 1)
     ref_path = np.vstack((new_points, ref_path))
     
-    return CurvilinearCoordinateSystem(ref_path, 50.0, 0.1), ref_path, dir_ref_path   #获取Frenet坐标系，参考路径，参考路径单位方向向量
+    return CurvilinearCoordinateSystem(ref_path, 50.0, 0.1), ref_path, dir_ref_path   #调用commonroad函数CurvilinearCoordinateSystem获取Frenet坐标系，参考路径，参考路径单位方向向量；其中，CurvilinearCoordinateSystem 类的作用是建立一个基于参考路径的曲线坐标系
 
 """
-    基于给定的场景和规划问题，生成一个曲线坐标系(包括参考路径和参考路径的单位方向向量)，在mian中调用
+    
 """
 def get_lane_info(scenario, curv_cosy, x0_ev_curv, ref_path = None, planning_problem_set=None, dir_ref_path = None):
     lanelets = scenario._lanelet_network._lanelets

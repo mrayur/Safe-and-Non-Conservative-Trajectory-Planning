@@ -13,27 +13,27 @@ class Obstacle:
             'VS': np.array([-0.4, -5.0]),
             'VW': np.array([-5.0, -0.4]),
             'VN': np.array([-0.4, -9.0])}
-    #不同lsrtype过程噪声协方差矩阵
+    #不同lsrtype过程噪声协方差矩阵， 2*2
     P_w = {'VE': np.diag([0.44, 0.09]),
             'VS': np.diag([0.09, 0.44]),
             'VW': np.diag([0.44, 0.09]),
             'VN': np.diag([0.09, 0.44])}
-    #不同lsrtype测量噪声协方差矩阵
+    #不同lsrtype测量噪声协方差矩阵，4*4
     P_v = {'VE': np.diag([0.25, 0.25, 0.028, 0.028]),
             'VS': np.diag([0.028, 0.028, 0.25, 0.25]),
             'VW': np.diag([0.25, 0.25, 0.028, 0.028]),
             'VN': np.diag([0.028, 0.028, 0.25, 0.25])}
-    #不同lsrtype状态权重矩阵
+    #不同lsrtype状态权重矩阵，4*4
     Qo = {'VE': np.diag([0.0, 1.0, 0.1, 0.1]),
             'VS': np.diag([0.1, 0.1, 0.0, 1.0]),
             'VW': np.diag([0.0, 1.0, 0.1, 0.1]),
             'VN': np.diag([0.1, 0.1, 0.0, 1.0])}
-    #不同lsrtype控制输入权重矩阵
+    #不同lsrtype控制输入权重矩阵，2*1
     Ro = {'VE': np.diag([1.0, 0.15]),
             'VS': np.diag([0.15, 1.0]),
             'VW': np.diag([1.0, 0.15]),
             'VN': np.diag([0.15, 1.0])}
-    #不同lsrtype某种长度/宽度权重矩阵？？？
+    #不同lsrtype，感觉是车辆尺寸吧
     lwo = {'VE': np.array([5.0, 2.0]),
             'VS': np.array([2.0, 5.0]),
             'VW': np.array([5.0, 2.0]),

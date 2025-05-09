@@ -18,20 +18,23 @@ np.set_printoptions(suppress=True)#避免使用科学计数法
 
 # %% Startup
 #  Set parameters and flags
-N = 10
+N = 10  #MPC预测时域
 enable_comparison = True
-iter_recompute_cosy = False 
+iter_recompute_cosy = False #是否在每次迭代中重新计算Frenet坐标系；这里设置成false后，后续只在initial frenet frame中使用了一次
 show_plots = True 
-number_runs_code = 1
-# number_runs_code = 100    # Number of Simulations to evaluate statistical properties of the computation time
+number_runs_code = 1 #代码运行次数，1次用以验证效果
+# number_runs_code = 100    #100次用以计算平均求解时间
 
 # %% Scenarios for the simulation
-# Select the file name of the scenario
+# 更换场景名称
 file_name = 'USA_US101-13_2_T-1' 
 # file_name = 'DEU_A99-1_2_T-1'
 
 # -----------------------------------------------------------------------------
 # %% Load scenario
+"""""
+定义要存储的特征列表 features_store，这些特征与计算成本、计算时间等相关,然后创建一个字典 store_variables，用于存储每次运行时这些特征的值
+"""
 features_store = ['__cost', '__cost_comparison',
                   '__time_smpc_average', '__time_smpc_max',
                   '__time_cvpm1_average', '__time_cvpm1_max',
@@ -51,24 +54,25 @@ for idx in range(number_runs_code):  # Loop to run  a number of Simulations to e
     #   read scenario html
     file_path = os.path.join(os.getcwd(), 'scenario/'+file_name+'.xml')
     scenario, planning_problem_set = CommonRoadFileReader(file_path).open()
-    n_steps = scenario._dynamic_obstacles[[*scenario._dynamic_obstacles.keys()][0]]._prediction._final_time_step
+    n_steps = scenario._dynamic_obstacles[[*scenario._dynamic_obstacles.keys()][0]]._prediction._final_time_step#第一个动态障碍物预测轨迹的最终时间步;scenario._dynamic_obstacles 是一个字典,*scenario._dynamic_obstacles.keys() 会将 dict_keys 对象解包为独立元素，配合外层的列表推导 [* ... ]，将解包后的键转换为真正的列表。此时就可以通过索引 [0] 取第一个动态障碍物的键
     T = scenario._dt
 
-    if len(planning_problem_set._planning_problem_dict.keys()) != 1:
-        breakpoint()
+    if len(planning_problem_set._planning_problem_dict.keys()) != 1: #只处理一个规划问题，
+        breakpoint() #实际上，breakpoint() 是对 pdb.set_trace() 的一种封装，它会根据当前环境选择合适的调试器（默认情况下，如果没有自定义 sys.breakpointhook()，会使用 pdb）。
     id_ev = [*planning_problem_set._planning_problem_dict.keys()][0]
     planning_problem = list(planning_problem_set.planning_problem_dict.values())[0]
 
-    # Extract obstacle lists
+    # Extract obstacle lists,Ao状态转移矩阵，Bo控制输入矩阵
     Ao = np.array([[1.0, T, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, T], [0.0, 0.0, 0.0, 1.0]])
     Bo = np.array([[0.5*T**2, 0.0], [T, 0.0], [0.0, 0.5*T**2], [0.0, T]])
     obstacle_list = []
     Ko, umaxo, umino, P_w, P_v, lwo, v_amp = [], [], [], [], [], [], []
-    curv_cosy0, ref_path0, dir_ref_path0 = get_frenet_frame(scenario, planning_problem)  # initial frenet frame
+    curv_cosy0, ref_path0, dir_ref_path0 = get_frenet_frame(scenario, planning_problem)  # initial frenet frame，基于给定的场景和规划问题生成一个曲线坐标系（包括参考路径和参考路径的单位方向向量）
+    #curv_cosy0在下面用到了，用于计算obstacle的orientation，从而计算lsr_type，从而计算umin, umax等
     for o in scenario._dynamic_obstacles.values():
         obstacle_list.append(Obstacle(curv_cosy0, id=o._obstacle_id, length=o._obstacle_shape._length, width=o._obstacle_shape._width,
-                                    type=o._obstacle_type, trajectory=extract_trajectory(o)))
-        Ko.append(compute_lqr(Ao, Bo, obstacle_list[-1]._Qo, obstacle_list[-1]._Ro))
+                                    type=o._obstacle_type, trajectory=extract_trajectory(o)))#调用了Obstacle创建obstacle，并obstacle.list
+        Ko.append(compute_lqr(Ao, Bo, obstacle_list[-1]._Qo, obstacle_list[-1]._Ro)) #上一步append，这一步调用obstacle_list[-1]来获取这个最新的obstacle
         umaxo.append(obstacle_list[-1]._umax)
         umino.append(obstacle_list[-1]._umin)
         P_w.append(obstacle_list[-1]._P_w)
@@ -83,14 +87,14 @@ for idx in range(number_runs_code):  # Loop to run  a number of Simulations to e
                         EV.umin, EV.dumax, xref_ev=np.array([0.0, 0.0, 0.0, 27.0]),
                         Q_ev=np.diag([0.0, 2.5, 10.0, 0.25]), R_ev=np.diag([0.33, 15]), beta=0.9,
                         features_store=features_store)
-    if [*planning_problem_set._planning_problem_dict.keys()] != [id_ev]:
+    if [*planning_problem_set._planning_problem_dict.keys()] != [id_ev]:#再检测一遍只存在针对EV的唯一一个规划问题
         print('Error: Planning problem set does not contain ', id_ev, ' only')
 
     ev = EV(planning_problem_set.find_planning_problem_by_id(id_ev)._initial_state,
             parameters_vehicle3.parameters_vehicle3(), controller, T)
 
 
-    #   double variables for comparison algorithm
+    # double variables for comparison algorithm
     planning_problem_set_comparison = copy.deepcopy(planning_problem_set)
     scenario_comparison = copy.deepcopy(scenario)
     planning_problem_comparison = list(planning_problem_set_comparison.planning_problem_dict.values())[0]
@@ -143,7 +147,7 @@ for idx in range(number_runs_code):  # Loop to run  a number of Simulations to e
     controller.print_average_stage_cost()
     for key in store_variables.keys():
         exec('store_variables[\'%s\'].append(controller._SMPCVPM%s)'%(key, key))
-    
+
 
 # %% Creating plots
 if show_plots:
